@@ -1,69 +1,82 @@
 import streamlit as st
 import random
 
-# ページ設定
 st.set_page_config(page_title="今際の国のアリス：暴走でんしゃ", layout="centered")
 
-# --- セッション状態の初期化 ---
 if 'game_status' not in st.session_state:
-    st.session_state.game_status = "START_SCREEN" # 状態: START_SCREEN, PLAYING, GAMEOVER, CLEAR
+    st.session_state.game_status = "START_SCREEN"
+
+def generate_hint(is_gas):
+    """難易度を維持するため、70%の確率で正しいヒントを出し、30%で嘘をつく"""
+    true_hint = is_gas
+    if random.random() > 0.7: # 30%で逆転
+        true_hint = not is_gas
+    
+    if true_hint:
+        return random.choice(["【広告】安全第一。非常時に備えよ。", "【掲示】この車両には防犯カメラが設置されています。", "【落書き】死にたくない死にたくない..."])
+    else:
+        return random.choice(["【広告】高原の爽やかな空気をあなたに。", "【広告】ミントガムで深呼吸。", "【掲示】空調設備点検済み。"])
 
 def start_new_game():
     st.session_state.current_car = 8
     st.session_state.canisters = 5
-    st.session_state.gas_cars = random.sample(range(1, 8), 4) # 1〜7号車のうち4つ
+    st.session_state.gas_cars = random.sample(range(1, 8), 4)
     st.session_state.logs = ["8号車（最後尾）からスタートしました。"]
+    # 最初の車両のヒント
+    first_car_gas = 7 in st.session_state.gas_cars
+    st.session_state.current_hint = generate_hint(first_car_gas)
     st.session_state.game_status = "PLAYING"
 
-# --- メインロジック ---
-
-# 1. スタート画面
 if st.session_state.game_status == "START_SCREEN":
     st.title("今際の国のアリス：暴走でんしゃ")
-    st.write("密室の暴走電車。毒ガスを避け、1号車のブレーキを目指せ。")
+    st.write("全8車両。4つに毒。中和剤は5つ。")
+    st.write("車両の「広告」が空気を暗示しているが、それが真実とは限らない...")
     if st.button("げぇむを開始する"):
         start_new_game()
         st.rerun()
 
-# 2. プレイ中画面
 elif st.session_state.game_status == "PLAYING":
     st.title(f"現在：{st.session_state.current_car} 号車")
+    st.warning(st.session_state.current_hint) # ヒントを表示
     st.info(f"残りの中和剤：{st.session_state.canisters} 個")
 
-    st.write("次の車両へ進みます。マスク（中和剤）を使いますか？")
     col1, col2 = st.columns(2)
 
     with col1:
         if st.button("マスクを使う", disabled=(st.session_state.canisters <= 0)):
-            # 進行処理
             st.session_state.canisters -= 1
             st.session_state.current_car -= 1
             car = st.session_state.current_car
             
-            # 毒ガス判定
+            # 毒ガス判定 + 5%の不発確率
             if car in st.session_state.gas_cars:
-                st.session_state.logs.insert(0, f"【{car}号車】⚠️ 毒ガス放出！中和剤で耐えた。")
+                if random.random() < 0.05: # 5%で失敗
+                    st.session_state.logs.insert(0, f"【{car}号車】⚠️ 毒ガス放出！中和剤が不発...！")
+                    st.session_state.game_status = "GAMEOVER"
+                else:
+                    st.session_state.logs.insert(0, f"【{car}号車】⚠️ 毒ガス放出！中和剤で耐えた。")
             else:
                 st.session_state.logs.insert(0, f"【{car}号車】空気は正常だ。")
             
-            # クリア判定（1号車到達）
-            if car == 1:
+            # 次の車両のヒント更新
+            if car > 1:
+                st.session_state.current_hint = generate_hint((car-1) in st.session_state.gas_cars)
+            if car == 1 and st.session_state.game_status == "PLAYING":
                 st.session_state.game_status = "CLEAR"
             st.rerun()
 
     with col2:
         if st.button("マスクを使わない"):
-            # 進行処理
             st.session_state.current_car -= 1
             car = st.session_state.current_car
             
-            # 毒ガス判定
             if car in st.session_state.gas_cars:
-                st.session_state.logs.insert(0, f"【{car}号車】⚠️ 毒ガス放出！")
+                st.session_state.logs.insert(0, f"【{car}号車】⚠️ 毒ガス放出！死を悟った。")
                 st.session_state.game_status = "GAMEOVER"
             else:
-                st.session_state.logs.insert(0, f"【{car}号車】空気は正常だ。")
-                # 毒なしで1号車到達
+                st.session_state.logs.insert(0, f"【{car}号車】空気は正常だ。運が良かったな。")
+                if car > 1:
+                    st.session_state.current_hint = generate_hint((car-1) in st.session_state.gas_cars)
                 if car == 1:
                     st.session_state.game_status = "CLEAR"
             st.rerun()
@@ -72,17 +85,15 @@ elif st.session_state.game_status == "PLAYING":
     for log in st.session_state.logs:
         st.text(log)
 
-# 3. ゲームオーバー画面
 elif st.session_state.game_status == "GAMEOVER":
-    st.error("💀 げぇむおーばー：毒ガスを吸い込みました。")
+    st.error("💀 GAME OVER")
     if st.button("もう一度挑戦する"):
         start_new_game()
         st.rerun()
 
-# 4. クリア画面
 elif st.session_state.game_status == "CLEAR":
     st.balloons()
-    st.success("🎉 げぇむくりあ！1号車のブレーキを停止させました。")
-    if st.button("新しいげぇむを始める"):
+    st.success("🎉 CLEAR！生き残った。")
+    if st.button("新しいげぇむへ"):
         start_new_game()
         st.rerun()
