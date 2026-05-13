@@ -1,73 +1,69 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>今際の国のアリス：暴走でんしゃ</title>
-    <style>
-        body { background: #111; color: #eee; font-family: sans-serif; text-align: center; padding: 20px; }
-        #game-box { max-width: 500px; margin: 0 auto; border: 2px solid #555; padding: 20px; border-radius: 10px; background: #222; }
-        button { padding: 10px 20px; margin: 10px; font-size: 16px; cursor: pointer; border-radius: 5px; border: none; }
-        .btn-yes { background: #d9534f; color: white; }
-        .btn-no { background: #5bc0de; color: white; }
-        #log { margin-top: 20px; text-align: left; height: 150px; overflow-y: auto; border-top: 1px solid #444; padding-top: 10px; font-size: 14px; }
-    </style>
-</head>
-<body>
-    <div id="game-box">
-        <h1>暴走でんしゃ</h1>
-        <p id="status">現在: 8号車</p>
-        <p id="info">残りのキャニスター: 5個</p>
-        <div id="controls">
-            <p>次の車両でマスクを使いますか？</p>
-            <button class="btn-yes" onclick="play(true)">使う</button>
-            <button class="btn-no" onclick="play(false)">使わない</button>
-        </div>
-        <div id="log"></div>
-    </div>
+import streamlit as st
+import random
 
-    <script>
-        let currentCar = 8;
-        let canisters = 5;
-        // 1〜7号車のうち4つを毒ガス(1)に設定
-        let cars = [0,0,0,0,0,0,0];
-        let gasIndexes = [0,1,2,3,4,5,6].sort(() => Math.random() - 0.5).slice(0, 4);
-        gasIndexes.forEach(i => cars[i] = 1);
+# タイトルと説明
+st.title("今際の国のアリス：暴走でんしゃ")
+st.write("全8車両のうち4つに毒ガスがあります。先頭車両を目指せ。")
 
-        function log(msg) {
-            const logBox = document.getElementById('log');
-            logBox.innerHTML = msg + "<br>" + logBox.innerHTML;
-        }
+# ゲームの状態管理
+if 'current_car' not in st.session_state:
+    st.session_state.current_car = 8
+    st.session_state.canisters = 5
+    st.session_state.game_over = False
+    st.session_state.clear = False
+    # 毒ガスの配置（1〜7号車のうち4つ）
+    gas_cars = random.sample(range(1, 8), 4)
+    st.session_state.gas_cars = gas_cars
+    st.session_state.logs = []
 
-        function play(useMask) {
-            if (useMask && canisters <= 0) {
-                log("キャニスターがありません！生身で挑みます。");
-                useMask = false;
-            }
+def play_turn(use_mask):
+    if st.session_state.game_over or st.session_state.clear:
+        return
 
-            if (useMask) canisters--;
-            currentCar--;
+    if use_mask:
+        st.session_state.canisters -= 1
+    
+    st.session_state.current_car -= 1
+    car = st.session_state.current_car
 
-            document.getElementById('status').innerText = `現在: ${currentCar}号車`;
-            document.getElementById('info').innerText = `残りのキャニスター: ${canisters}個`;
+    if car in st.session_state.gas_cars:
+        if use_mask:
+            st.session_state.logs.append(f"{car}号車：毒ガス放出！マスクで防いだ。")
+        else:
+            st.session_state.logs.append(f"{car}号車：毒ガス放出！GAME OVER")
+            st.session_state.game_over = True
+    else:
+        st.session_state.logs.append(f"{car}号車：空気は正常。")
 
-            if (cars[currentCar - 1] === 1) {
-                log(`⚠️ ${currentCar}号車：毒ガス放出！`);
-                if (useMask) {
-                    log("中和剤のおかげで助かった...");
-                } else {
-                    log("<strong>GAME OVER... 毒ガスを吸い込みました。</strong>");
-                    document.getElementById('controls').innerHTML = '<button onclick="location.reload()">再挑戦</button>';
-                    return;
-                }
-            } else {
-                log(`${currentCar}号車：空気は正常。`);
-            }
+    if car == 1 and not st.session_state.game_over:
+        st.session_state.clear = True
 
-            if (currentCar === 1) {
-                log("<strong>🎉 CLEAR! 先頭車両でブレーキを引きました！</strong>");
-                document.getElementById('controls').innerHTML = '<button onclick="location.reload()">もう一度遊ぶ</button>';
-            }
-        }
-    </script>
-</body>
-</html>
+# 画面表示
+st.subheader(f"現在：{st.session_state.current_car} 号車")
+st.info(f"残りの中和剤：{st.session_state.canisters} 個")
+
+if not st.session_state.game_over and not st.session_state.clear:
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("マスクを使う", disabled=st.session_state.canisters <= 0):
+            play_turn(True)
+            st.rerun()
+    with col2:
+        if st.button("マスクを使わない"):
+            play_turn(False)
+            st.rerun()
+elif st.session_state.game_over:
+    st.error("💀 げぇむおーばー")
+    if st.button("リトライ"):
+        for key in list(st.session_state.keys()): del st.session_state[key]
+        st.rerun()
+elif st.session_state.clear:
+    st.balloons()
+    st.success("🎉 げぇむくりあ！")
+    if st.button("もう一度遊ぶ"):
+        for key in list(st.session_state.keys()): del st.session_state[key]
+        st.rerun()
+
+# 履歴表示
+for log in reversed(st.session_state.logs):
+    st.text(log)
